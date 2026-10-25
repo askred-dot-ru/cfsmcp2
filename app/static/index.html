@@ -20,7 +20,7 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="/static/i18n.js?v=77"></script>
+  <script src="/static/i18n.js?v=78"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
@@ -114,6 +114,32 @@
     #openLmSettings.lm-pending .lm-dot {
       background:var(--warn); opacity:.7;
     }
+    /* RouterAI balance: green by default, amber under 100 ₽, pulsing red near zero */
+    #routeraiBalance {
+      display:inline-flex; align-items:center; gap:7px;
+      font-variant-numeric: tabular-nums;
+    }
+    #routeraiBalance .bal-dot {
+      width:9px; height:9px; border-radius:50%; flex:0 0 auto;
+      background:var(--ok); box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 25%, transparent);
+    }
+    #routeraiBalance.bal-low {
+      /* .navgroup .btn pins its own colour, so the tint has to be forced. */
+      color:var(--warn) !important;
+      background: color-mix(in srgb, var(--warn) 14%, transparent) !important;
+    }
+    #routeraiBalance.bal-low .bal-dot {
+      background:var(--warn); box-shadow:0 0 0 2px color-mix(in srgb, var(--warn) 35%, transparent);
+    }
+    #routeraiBalance.bal-critical {
+      color:var(--err) !important;
+      background: color-mix(in srgb, var(--err) 18%, transparent) !important;
+      animation: balPulse 1.6s ease-in-out infinite;
+    }
+    #routeraiBalance.bal-critical .bal-dot {
+      background:var(--err); box-shadow:0 0 0 2px color-mix(in srgb, var(--err) 40%, transparent);
+    }
+    @keyframes balPulse { 0%,100% { opacity:1 } 50% { opacity:.55 } }
     h1 {
       margin:0; font-size:22px; font-weight:750; letter-spacing:.04em;
       font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
@@ -1482,6 +1508,10 @@
         <button class="btn secondary" id="openLmSettings" type="button" title="LM Studio: …" aria-label="Настройки LM Studio">
           <span class="lm-dot" id="lmStatusDot" aria-hidden="true"></span>
           <span data-i18n="header.lm">LM Studio</span>
+        </button>
+        <button class="btn secondary" id="routeraiBalance" type="button" hidden title="Баланс RouterAI">
+          <span class="bal-dot" aria-hidden="true"></span>
+          <b id="routeraiBalanceVal">—</b>
         </button>
         <span class="navgroup-sep" aria-hidden="true"></span>
         <button class="btn icon secondary" id="openAppSettings" type="button" data-i18n-title="header.appSettings" data-i18n-aria="header.appSettings" title="Настройки" aria-label="Настройки">
@@ -5931,11 +5961,47 @@
       const w = String(settings.embedding_workers || 2);
       wSel.value = ['1','2','4','8','12','16'].includes(w) ? w : '2';
       applyEntitiesPollInterval(settings.ui_poll_interval_sec);
+      void loadBalance();
+      startBalancePolling();
       syncStatsWindowOptions();
       if (typeof syncOnecPlatformSettingsForm === 'function') syncOnecPlatformSettingsForm();
       await loadModels();
     }
 
+    function formatRub(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '—';
+      return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+    }
+    function applyBalanceUi(res) {
+      const btn = document.getElementById('routeraiBalance');
+      const val = document.getElementById('routeraiBalanceVal');
+      if (!btn || !val) return;
+      const show = !!(res && res.ok && res.provider === 'routerai' && typeof res.balance === 'number');
+      btn.hidden = !show;
+      // .btn sets its own display, so an inline !important is the only reliable hide.
+      btn.style.setProperty('display', show ? 'inline-flex' : 'none', 'important');
+      if (!show) return;
+      const amount = formatRub(res.balance);
+      val.textContent = amount;
+      btn.classList.toggle('bal-low', !!res.low && !res.critical);
+      btn.classList.toggle('bal-critical', !!res.critical);
+      btn.dataset.topup = res.topup_url || 'https://routerai.ru/settings/billing';
+      const state = res.critical ? t('balance.critical') : (res.low ? t('balance.low') : t('balance.ok'));
+      btn.title = t('balance.title', { amount, state });
+      btn.setAttribute('aria-label', btn.title);
+    }
+    async function loadBalance({ live = false } = {}) {
+      try {
+        const res = await fetch('/api/settings/balance' + (live ? '?live=true' : '')).then((r) => r.json());
+        applyBalanceUi(res);
+      } catch (_) { /* badge stays hidden — never break the page over a balance */ }
+    }
+    let balancePollTimer = null;
+    function startBalancePolling() {
+      if (balancePollTimer) return;
+      balancePollTimer = setInterval(() => { void loadBalance({ live: true }); }, 60000);
+    }
     function setLmStatus(state, title) {
       const btn = document.getElementById('openLmSettings');
       if (!btn) return;
@@ -8827,6 +8893,7 @@
       wSel.value = ['1','2','4','8','12','16'].includes(w) ? w : '2';
       modelSelect.value = settings.default_embedding_model;
       fillBslEmbedLimitsForm(settings);
+      void loadBalance({ live: true });
       await loadModels();
       if (close) closeLmModal();
       else await showAlert(t('lm.advSaved'), t('lm.tabAdvanced'));
@@ -8871,6 +8938,13 @@
         // The select value is the model id; drop the stale manual text.
         input.value = '';
         lmSetVisible(input, false);
+      });
+    }
+    const balanceBadge = document.getElementById('routeraiBalance');
+    if (balanceBadge) {
+      balanceBadge.addEventListener('click', () => {
+        const url = balanceBadge.dataset.topup || 'https://routerai.ru/settings/billing';
+        window.open(url, '_blank', 'noopener,noreferrer');
       });
     }
     const embedProviderSel = document.getElementById('embedProvider');

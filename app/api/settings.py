@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import connect
 from app.core.version import APP_VERSION
 from app.schemas.settings import (
+    BalanceOut,
     DbInfoOut,
     EmbeddingProbeIn,
     McpToolsResponse,
@@ -16,7 +17,7 @@ from app.schemas.settings import (
     SettingsPatch,
     VacuumResponse,
 )
-from app.services import embedding_providers, lm_studio, runtime_settings
+from app.services import balance, embedding_providers, lm_studio, runtime_settings
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -219,6 +220,12 @@ def preview_models(body: EmbeddingProbeIn) -> ModelsResponse:
             api_key=args["api_key"],
         )
     )
+
+
+@router.get("/balance")
+def provider_balance(live: bool = False) -> BalanceOut:
+    """RouterAI account balance; ``live=true`` bypasses the 60-second cache."""
+    return BalanceOut(**balance.get_balance(live=live))
 
 
 @router.get("/ping")

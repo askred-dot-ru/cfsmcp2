@@ -165,6 +165,22 @@ class EmbeddingModelOut(BaseModel):
     max_context_length: int | None = None
 
 
+class BalanceOut(BaseModel):
+    ok: bool
+    provider: str
+    provider_label: str = ""
+    balance: float | None = None
+    currency: str = "RUB"
+    low: bool = False
+    critical: bool = False
+    low_threshold: float = 100.0
+    critical_threshold: float = 20.0
+    topup_url: str = ""
+    error: str | None = None
+    cached: bool = False
+    checked_at: int = 0
+
+
 class EmbeddingProbeIn(BaseModel):
     """Unsaved values from the UI, used to preview a provider before saving."""
 

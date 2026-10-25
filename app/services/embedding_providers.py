@@ -36,6 +36,9 @@ PROVIDERS: dict[str, dict] = {
         "docs_url": "https://lmstudio.ai/",
         # LM Studio answers locally and fast: always ask the live server.
         "suggested_models": [],
+        # Local server: no account, no balance, no top-up page.
+        "balance_path": "",
+        "topup_url": "",
     },
     ROUTERAI: {
         "id": ROUTERAI,
@@ -53,6 +56,9 @@ PROVIDERS: dict[str, dict] = {
             "google/gemini-embedding-001",
             "mistralai/mistral-embed-2312",
         ],
+        # GET /v1/credits -> {"data": {"credits": 123.45}} (roubles)
+        "balance_path": "credits",
+        "topup_url": "https://routerai.ru/settings/billing",
     },
 }
 
