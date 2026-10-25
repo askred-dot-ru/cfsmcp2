@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     zip_max_compression_ratio: int = 2000  # file_size / compressed_size на entry
 
     lm_studio_url: str = "http://127.0.0.1:1234"
+    # Провайдер эмбеддингов: lmstudio (по умолчанию) | routerai.
+    # lmstudio остаётся дефолтом, чтобы первичная установка работала как раньше.
+    embeddings_provider: str = "lmstudio"
+    # Base URL облачного/своего провайдера (для lmstudio игнорируется — берётся lm_studio_url).
+    embeddings_base_url: str = ""
+    # Bearer-ключ облачного провайдера. Пусто — без заголовка Authorization (локальный LM Studio).
+    embeddings_api_key: str = ""
     default_embedding_model: str = "text-embedding-multilingual-e5-small"
     embedding_batch_size: int = 128
     # Cap texts per LM Studio /v1/embeddings call (objects may expand to many passages in chunks mode)
